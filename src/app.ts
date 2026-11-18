@@ -40,6 +40,10 @@ app.use('/uploads', express.static(uploadDir));
 // Mount API routes
 app.use('/api', apiRoutes);
 
+app.get('/', (req: Request, res: Response) => {
+  res.send('<h1>ProjectLink API is running perfectly!</h1>');
+});
+
 // Global Error Handler
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   console.error('Unhandled Server Error:', err);
