@@ -12,10 +12,14 @@ export async function getStudents(req: AuthRequest, res: Response) {
     const {
       search,
       skill,
+      skills,
       college,
       degree,
       minCgpa,
       graduationYear,
+      graduationYears,
+      internship,
+      hasInternship,
       availability,
       page = 1,
       limit = 12,
@@ -29,26 +33,85 @@ export async function getStudents(req: AuthRequest, res: Response) {
     if (degree) {
       filter.degree = { $regex: String(degree), $options: 'i' };
     }
-    if (graduationYear) {
-      filter.graduationYear = Number(graduationYear);
-    }
-    if (minCgpa) {
-      filter.cgpa = { $gte: Number(minCgpa) };
-    }
     if (availability && availability !== 'all') {
       filter.availability = availability;
-    }
-    if (skill) {
-      filter.skills = String(skill);
     }
 
     const profiles = await StudentProfile.find(filter).populate('user');
 
-    // Post-filter by user name or keyword search if provided
     let filtered = profiles;
+
+    // 1. Minimum CGPA filter (Rule: 1.0 means ALL/No minimum, only filter if > 1.0)
+    const minCgpaNum = minCgpa ? parseFloat(String(minCgpa)) : 1.0;
+    if (minCgpaNum > 1.0) {
+      filtered = filtered.filter((p: any) => {
+        const val = parseFloat(p.cgpa);
+        return !isNaN(val) && val >= minCgpaNum;
+      });
+    }
+
+    // 2. Graduation Year filter (supports single year, comma-separated, or array e.g. 2026, 2027)
+    const rawYears = graduationYears || graduationYear;
+    if (rawYears) {
+      const yearList = Array.isArray(rawYears)
+        ? rawYears.map(Number)
+        : String(rawYears)
+            .split(',')
+            .map((y) => Number(y.trim()))
+            .filter((n) => !isNaN(n) && n > 0);
+      if (yearList.length > 0) {
+        filtered = filtered.filter((p: any) => yearList.includes(Number(p.graduationYear)));
+      }
+    }
+
+    // 3. Technical Skills filter (Case-insensitive matching)
+    // Rule: Normalize both selected filter skills and student's skills array using .toLowerCase().trim()
+    // Supports matching e.g. "react" to "React.js", "React", etc.
+    const rawSkills = skills || skill;
+    if (rawSkills) {
+      const selectedSkills = Array.isArray(rawSkills)
+        ? (rawSkills as string[]).map((s) => String(s).trim()).filter(Boolean)
+        : String(rawSkills)
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean);
+
+      if (selectedSkills.length > 0) {
+        filtered = filtered.filter((student: any) => {
+          const studentSkills: string[] = (student.skills || []).map((s: string) =>
+            s.toLowerCase().trim()
+          );
+          return selectedSkills.every((filterSkill) => {
+            const normFilter = filterSkill.toLowerCase().trim();
+            return studentSkills.some(
+              (studentSkill) =>
+                studentSkill === normFilter || studentSkill.includes(normFilter)
+            );
+          });
+        });
+      }
+    }
+
+    // 4. Internship Experience Check
+    // Rule: Check Array.isArray(student.workExperience) && student.workExperience.length > 0
+    const rawInternship = internship || hasInternship;
+    if (rawInternship && rawInternship !== 'all') {
+      const checkHasExperience = (p: any): boolean => {
+        const exps = p.workExperience || p.workExperienceList || p.experience || [];
+        return Array.isArray(exps) && exps.length > 0;
+      };
+
+      if (rawInternship === 'has' || rawInternship === 'true') {
+        filtered = filtered.filter((p: any) => checkHasExperience(p));
+      } else if (rawInternship === 'fresher' || rawInternship === 'false') {
+        filtered = filtered.filter((p: any) => !checkHasExperience(p));
+      }
+    }
+
+    // 5. Post-filter by user name or keyword search if provided
     if (search) {
-      const q = String(search).toLowerCase();
-      filtered = profiles.filter((p: any) => {
+      const q = String(search).toLowerCase().trim();
+      filtered = filtered.filter((p: any) => {
         const nameMatch = p.user?.name?.toLowerCase().includes(q);
         const bioMatch = p.bio?.toLowerCase().includes(q);
         const skillMatch = p.skills?.some((s: string) => s.toLowerCase().includes(q));
