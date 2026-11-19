@@ -85,6 +85,7 @@ export interface IPortfolioItem {
 export interface IStudentProfile {
   _id: string;
   userId: string;
+  studentIdNumber?: string;
   user?: IUser;
   college: string;
   degree: string;

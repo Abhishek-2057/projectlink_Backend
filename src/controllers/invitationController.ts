@@ -74,15 +74,25 @@ export async function getMyInvitations(req: AuthRequest, res: Response) {
   try {
     if (!req.user) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
-    // Team invitations sent to current user
-    const teamInvites = await TeamInvitation.find({ receiverId: req.user._id, status: 'pending' })
+    // All Team invitations sent to current user
+    const allInvites = await TeamInvitation.find({ receiverId: req.user._id })
       .populate('team')
       .populate('sender');
+
+    const pendingInvites = (allInvites || []).filter((i: any) => i.status === 'pending');
+    const historyInvites = (allInvites || [])
+      .filter((i: any) => i.status !== 'pending')
+      .sort((a: any, b: any) => {
+        const dateA = new Date(a.respondedAt || a.sentAt).getTime();
+        const dateB = new Date(b.respondedAt || b.sentAt).getTime();
+        return dateB - dateA;
+      });
 
     return res.json({
       success: true,
       data: {
-        teamInvitations: teamInvites,
+        teamInvitations: pendingInvites,
+        history: historyInvites,
       },
     });
   } catch (err: any) {

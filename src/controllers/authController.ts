@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { User, StudentProfile, CompanyProfile } from '../models/index.js';
 import { generateToken, AuthRequest } from '../middleware/auth.js';
-import { logActivity } from '../utils/helpers.js';
+import { logActivity, generateStudentIdNumber } from '../utils/helpers.js';
 
 export async function registerStudent(req: Request, res: Response) {
   try {
@@ -30,8 +30,11 @@ export async function registerStudent(req: Request, res: Response) {
       avatar: '',
     });
 
+    const studentIdNumber = generateStudentIdNumber();
+
     await StudentProfile.create({
       userId: user._id,
+      studentIdNumber,
       college,
       degree,
       graduationYear: Number(graduationYear),
@@ -184,6 +187,11 @@ export async function login(req: Request, res: Response) {
     let profile = null;
     if (user.role === 'student') {
       profile = await StudentProfile.findOne({ userId: user._id });
+      if (profile && !profile.studentIdNumber) {
+        const studentIdNumber = generateStudentIdNumber();
+        await StudentProfile.findByIdAndUpdate(profile._id, { studentIdNumber });
+        profile.studentIdNumber = studentIdNumber;
+      }
     } else if (user.role === 'company') {
       profile = await CompanyProfile.findOne({ userId: user._id });
     }
@@ -216,6 +224,11 @@ export async function getMe(req: AuthRequest, res: Response) {
 
     if (user.role === 'student') {
       profile = await StudentProfile.findOne({ userId: user._id });
+      if (profile && !profile.studentIdNumber) {
+        const studentIdNumber = generateStudentIdNumber();
+        await StudentProfile.findByIdAndUpdate(profile._id, { studentIdNumber });
+        profile.studentIdNumber = studentIdNumber;
+      }
     } else if (user.role === 'company') {
       profile = await CompanyProfile.findOne({ userId: user._id });
     }

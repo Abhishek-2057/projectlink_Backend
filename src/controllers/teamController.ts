@@ -276,7 +276,23 @@ export async function inviteMember(req: AuthRequest, res: Response) {
       return res.status(403).json({ success: false, message: 'Only team leader can invite members' });
     }
 
-    const targetUser = await User.findById(receiverId);
+    let targetUser = await User.findById(receiverId);
+    let resolvedReceiverId = receiverId;
+
+    if (!targetUser) {
+      const cleanId = String(receiverId).trim().toUpperCase();
+      const studentProfile = await StudentProfile.findOne({
+        $or: [
+          { studentIdNumber: cleanId },
+          { studentIdNumber: { $regex: `^${cleanId}$`, $options: 'i' } },
+        ],
+      });
+      if (studentProfile && studentProfile.userId) {
+        targetUser = await User.findById(studentProfile.userId);
+        resolvedReceiverId = studentProfile.userId;
+      }
+    }
+
     if (!targetUser || targetUser.role !== 'student') {
       return res.status(404).json({ success: false, message: 'Target student not found' });
     }
@@ -284,7 +300,7 @@ export async function inviteMember(req: AuthRequest, res: Response) {
     // Check if already an active member
     const existingMembership = await TeamMembership.findOne({
       teamId: id,
-      userId: receiverId,
+      userId: resolvedReceiverId,
       status: 'active',
     });
     if (existingMembership) {
@@ -294,7 +310,7 @@ export async function inviteMember(req: AuthRequest, res: Response) {
     // Check existing pending invitation
     const pendingInv = await TeamInvitation.findOne({
       teamId: id,
-      receiverId,
+      receiverId: resolvedReceiverId,
       status: 'pending',
     });
     if (pendingInv) {
@@ -304,14 +320,14 @@ export async function inviteMember(req: AuthRequest, res: Response) {
     const invitation = await TeamInvitation.create({
       teamId: id,
       senderId: req.user._id,
-      receiverId,
+      receiverId: resolvedReceiverId,
       message: message || `Join ${team.name} for final-year project collaboration!`,
       status: 'pending',
       sentAt: new Date().toISOString(),
     });
 
     await createNotification({
-      userId: receiverId,
+      userId: resolvedReceiverId,
       type: 'team_invite',
       title: 'New Team Invitation',
       message: `${req.user.name} invited you to join team "${team.name}"`,

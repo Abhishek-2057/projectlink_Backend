@@ -3,7 +3,7 @@ import fs from 'fs';
 import { User, StudentProfile, TeamMembership, Team } from '../models/index.js';
 import { generateId } from '../config/db.js';
 import { AuthRequest } from '../middleware/auth.js';
-import { logActivity } from '../utils/helpers.js';
+import { logActivity, generateStudentIdNumber } from '../utils/helpers.js';
 import { extractResumeText, parseResumeWithGemini } from '../services/aiResumeService.js';
 import { IParsedResume } from '../types/index.js';
 
@@ -218,13 +218,57 @@ export async function getStudentById(req: AuthRequest, res: Response) {
   }
 }
 
+export async function lookupStudentById(req: AuthRequest, res: Response) {
+  try {
+    const { identifier } = req.params;
+    if (!identifier || !identifier.trim()) {
+      return res.status(400).json({ success: false, message: 'Student ID identifier is required' });
+    }
+
+    const clean = identifier.trim().toUpperCase();
+
+    // 1. Search by studentIdNumber
+    let profile = await StudentProfile.findOne({
+      $or: [
+        { studentIdNumber: clean },
+        { studentIdNumber: { $regex: `^${clean}$`, $options: 'i' } },
+      ],
+    }).populate('user');
+
+    // 2. Fallback search by userId or Mongo _id
+    if (!profile) {
+      profile = await StudentProfile.findOne({ userId: identifier.trim() }).populate('user');
+    }
+    if (!profile) {
+      profile = await StudentProfile.findById(identifier.trim()).populate('user');
+    }
+
+    if (!profile) {
+      return res.status(404).json({ success: false, message: `No student found with ID "${identifier}"` });
+    }
+
+    return res.json({
+      success: true,
+      data: profile,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: 'Error looking up student', error: err.message });
+  }
+}
+
 export async function getMeProfile(req: AuthRequest, res: Response) {
   try {
     if (!req.user) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
-    const profile = await StudentProfile.findOne({ userId: req.user._id }).populate('user');
+    let profile = await StudentProfile.findOne({ userId: req.user._id }).populate('user');
     if (!profile) {
       return res.status(404).json({ success: false, message: 'Profile not found' });
+    }
+
+    if (!profile.studentIdNumber) {
+      const studentIdNumber = generateStudentIdNumber();
+      await StudentProfile.findByIdAndUpdate(profile._id, { studentIdNumber });
+      profile.studentIdNumber = studentIdNumber;
     }
 
     return res.json({ success: true, data: profile });

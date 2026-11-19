@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   getStudents,
   getStudentById,
+  lookupStudentById,
   getMeProfile,
   updateMeProfile,
   uploadResume,
@@ -15,6 +16,7 @@ import { upload } from '../middleware/upload.js';
 const router = Router();
 
 router.get('/', optionalAuth, getStudents);
+router.get('/lookup/:identifier', requireAuth, lookupStudentById);
 router.get('/me', requireAuth, getMeProfile);
 router.put('/me', requireAuth, updateMeProfile);
 router.post('/me/resume', requireAuth, upload.single('resume'), uploadResume);
