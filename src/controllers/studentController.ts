@@ -7,6 +7,58 @@ import { logActivity } from '../utils/helpers.js';
 import { extractResumeText, parseResumeWithGemini } from '../services/aiResumeService.js';
 import { IParsedResume } from '../types/index.js';
 
+function normalizeSkill(s: string): string {
+  return (s || '')
+    .toLowerCase()
+    .trim()
+    .replace(/\.js$/i, '')
+    .replace(/js$/i, '')
+    .replace(/\.ts$/i, '')
+    .replace(/ts$/i, '')
+    .trim();
+}
+
+export function isSkillMatch(candidateSkill?: string, filterSkill?: string): boolean {
+  if (!candidateSkill || !filterSkill) return false;
+  const cNorm = candidateSkill.toLowerCase().trim();
+  const fNorm = filterSkill.toLowerCase().trim();
+
+  // 1. Exact match (case-insensitive)
+  if (cNorm === fNorm) return true;
+
+  // 2. Normalized without .js / js / .ts / ts (e.g. 'react' matches 'react.js' or 'reactjs')
+  const cBase = normalizeSkill(cNorm);
+  const fBase = normalizeSkill(fNorm);
+  if (cBase === fBase && cBase.length > 0) return true;
+
+  // 3. Known language aliases
+  if ((fNorm === 'go' && cNorm === 'golang') || (fNorm === 'golang' && cNorm === 'go')) return true;
+  if ((fNorm === 'cpp' && cNorm === 'c++') || (fNorm === 'c++' && cNorm === 'cpp')) return true;
+  if ((fNorm === 'csharp' && cNorm === 'c#') || (fNorm === 'c#' && cNorm === 'csharp')) return true;
+  if ((fNorm === 'py' && cNorm === 'python') || (fNorm === 'python' && cNorm === 'py')) return true;
+
+  // 4. Protect specific distinct languages from false substring matches:
+  // 'java' should never match 'javascript'
+  if (
+    (fNorm === 'java' && cNorm.startsWith('javascript')) ||
+    (cNorm === 'java' && fNorm.startsWith('javascript'))
+  ) {
+    return false;
+  }
+
+  // 5. Short skills (<= 3 chars, like 'go', 'c', 'r', 'sql') must NOT do broad substring matching
+  if (fNorm.length <= 3 || cNorm.length <= 3) {
+    return false;
+  }
+
+  // 6. Word-based matching for multi-word technologies (e.g. 'tailwind' matches 'tailwind css')
+  const wordsC = cNorm.split(/[\s/,\-_]+/);
+  const wordsF = fNorm.split(/[\s/,\-_]+/);
+  if (wordsC.includes(fNorm) || wordsF.includes(cNorm)) return true;
+
+  return false;
+}
+
 export async function getStudents(req: AuthRequest, res: Response) {
   try {
     const {
@@ -78,14 +130,10 @@ export async function getStudents(req: AuthRequest, res: Response) {
 
       if (selectedSkills.length > 0) {
         filtered = filtered.filter((student: any) => {
-          const studentSkills: string[] = (student.skills || []).map((s: string) =>
-            s.toLowerCase().trim()
-          );
+          const studentSkills: string[] = student.skills || [];
           return selectedSkills.every((filterSkill) => {
-            const normFilter = filterSkill.toLowerCase().trim();
-            return studentSkills.some(
-              (studentSkill) =>
-                studentSkill === normFilter || studentSkill.includes(normFilter)
+            return studentSkills.some((studentSkill) =>
+              isSkillMatch(studentSkill, filterSkill)
             );
           });
         });
