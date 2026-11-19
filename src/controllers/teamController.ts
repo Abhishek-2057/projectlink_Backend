@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { Team, TeamMembership, TeamInvitation, User, StudentProfile } from '../models/index.js';
+import { Team, TeamMembership, TeamInvitation, User, StudentProfile, Conversation } from '../models/index.js';
 import { AuthRequest } from '../middleware/auth.js';
 import { logActivity, createNotification } from '../utils/helpers.js';
 
@@ -157,16 +157,38 @@ export async function getMyTeams(req: AuthRequest, res: Response) {
       teams.map(async (t: any) => {
         const mems = await TeamMembership.find({ teamId: t._id, status: 'active' }).populate('user');
         const myMembership = mems.find((m: any) => m.userId === req.user?._id);
+
+        const populatedMembers = await Promise.all(
+          mems.map(async (m: any) => {
+            let u = m.user;
+            if (!u && m.userId) {
+              const userDoc = await User.findById(m.userId);
+              if (userDoc) {
+                const { passwordHash, ...safe } = userDoc;
+                u = safe;
+              }
+            }
+            return {
+              _id: m._id || m.userId,
+              userId: m.userId,
+              name: u?.name || m.name || 'Member',
+              email: u?.email || '',
+              avatar: u?.avatar || m.avatar || '',
+              role: m.role || 'member',
+              joinedAt: m.joinedAt,
+              user: u || {
+                _id: m.userId,
+                name: m.name || 'Member',
+                avatar: m.avatar || '',
+              },
+            };
+          })
+        );
+
         return {
           ...t,
           myRole: myMembership?.role || 'member',
-          members: mems.map((m: any) => ({
-            _id: m.userId,
-            name: m.user?.name,
-            avatar: m.user?.avatar,
-            role: m.role,
-            joinedAt: m.joinedAt,
-          })),
+          members: populatedMembers,
         };
       })
     );
@@ -213,6 +235,17 @@ export async function createTeam(req: AuthRequest, res: Response) {
       joinedAt: new Date().toISOString(),
       status: 'active',
     });
+
+    try {
+      await Conversation.create({
+        type: 'team',
+        teamId: team._id,
+        title: team.name,
+        avatar: team.avatar || '',
+        participants: [req.user._id],
+        unreadCount: 0,
+      });
+    } catch {}
 
     await logActivity({
       actorId: req.user._id,
@@ -386,6 +419,18 @@ export async function respondInvitation(req: AuthRequest, res: Response) {
       // Update combined skills & member count
       await updateTeamCombinedSkills(team._id);
 
+      try {
+        const teamConv = await Conversation.findOne({ teamId: team._id, type: 'team' });
+        if (teamConv) {
+          const parts = teamConv.participants || [];
+          if (!parts.includes(req.user._id)) {
+            await Conversation.findByIdAndUpdate(teamConv._id, {
+              participants: [...parts, req.user._id],
+            });
+          }
+        }
+      } catch {}
+
       await createNotification({
         userId: team.leaderId,
         type: 'team_invite_accepted',
@@ -440,6 +485,15 @@ export async function removeMember(req: AuthRequest, res: Response) {
     await TeamMembership.findByIdAndUpdate(membership._id, { status: 'removed' });
     await updateTeamCombinedSkills(team._id);
 
+    try {
+      const teamConv = await Conversation.findOne({ teamId: id, type: 'team' });
+      if (teamConv && teamConv.participants) {
+        await Conversation.findByIdAndUpdate(teamConv._id, {
+          participants: teamConv.participants.filter((p: string) => p !== userId),
+        });
+      }
+    } catch {}
+
     return res.json({ success: true, message: 'Member removed from team' });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: 'Error removing member', error: err.message });
@@ -468,6 +522,15 @@ export async function leaveTeam(req: AuthRequest, res: Response) {
 
     await TeamMembership.findByIdAndUpdate(membership._id, { status: 'left' });
     await updateTeamCombinedSkills(team._id);
+
+    try {
+      const teamConv = await Conversation.findOne({ teamId: id, type: 'team' });
+      if (teamConv && teamConv.participants) {
+        await Conversation.findByIdAndUpdate(teamConv._id, {
+          participants: teamConv.participants.filter((p: string) => p !== req.user!._id),
+        });
+      }
+    } catch {}
 
     return res.json({ success: true, message: `You have left ${team.name}` });
   } catch (err: any) {

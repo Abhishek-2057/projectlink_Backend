@@ -174,7 +174,12 @@ export class QueryBuilder<T = any> implements PromiseLike<T[]> {
     const db = mongoose.connection.db!;
     for (const item of items) {
       if (field === 'user' && item.userId) {
-        const u = await db.collection('users').findOne({ _id: item.userId });
+        let u = await db.collection('users').findOne({ _id: item.userId });
+        if (!u && mongoose.Types.ObjectId.isValid(item.userId)) {
+          try {
+            u = await db.collection('users').findOne({ _id: new mongoose.Types.ObjectId(item.userId) as any });
+          } catch {}
+        }
         if (u) {
           const { passwordHash, ...safeUser } = u;
           item.user = safeUser;
