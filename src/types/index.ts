@@ -15,6 +15,14 @@ export interface IUser {
   updatedAt: string;
 }
 
+export interface ISkill {
+  _id: string;
+  name: string;
+  category: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface IAcademicInfo {
   college: string;
   degree: string;

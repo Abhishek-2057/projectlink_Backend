@@ -5,6 +5,7 @@ import path from 'path';
 import dotenv from 'dotenv';
 import { connectDB } from './config/db.js';
 import { initSocket } from './services/socket.js';
+import { seedSkillsIfNeeded } from './services/skillSeedService.js';
 import apiRoutes from './routes/index.js';
 
 dotenv.config();
@@ -60,6 +61,7 @@ initSocket(server);
 // Start server
 async function start() {
   await connectDB();
+  await seedSkillsIfNeeded();
   server.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`=======================================================`);
     console.log(` ProjectLink API Server running at http://localhost:${PORT}`);

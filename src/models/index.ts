@@ -21,6 +21,7 @@ import {
   IReview,
   IVerificationRequest,
   IActivityLog,
+  ISkill,
 } from '../types/index.js';
 
 export const User = new Model<IUser>('users');
@@ -44,3 +45,4 @@ export const Bookmark = new Model<IBookmark>('bookmarks');
 export const Review = new Model<IReview>('reviews');
 export const VerificationRequest = new Model<IVerificationRequest>('verificationRequests');
 export const ActivityLog = new Model<IActivityLog>('activityLogs');
+export const Skill = new Model<ISkill>('skills');

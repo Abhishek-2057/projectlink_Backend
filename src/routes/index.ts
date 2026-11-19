@@ -11,6 +11,7 @@ import workspaceRoutes from './workspaceRoutes.js';
 import chatRoutes from './chatRoutes.js';
 import notificationRoutes from './notificationRoutes.js';
 import adminRoutes from './adminRoutes.js';
+import skillRoutes from './skillRoutes.js';
 
 const router = Router();
 
@@ -26,6 +27,7 @@ router.use('/workspaces', workspaceRoutes);
 router.use('/chat', chatRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/admin', adminRoutes);
+router.use('/skills', skillRoutes);
 
 // Health check endpoint
 router.get('/health', (_req, res) => {

@@ -38,6 +38,7 @@ export interface DatabaseState {
   reviews: any[];
   verificationRequests: any[];
   activityLogs: any[];
+  skills: any[];
 }
 
 const defaultState: DatabaseState = {
@@ -62,6 +63,7 @@ const defaultState: DatabaseState = {
   reviews: [],
   verificationRequests: [],
   activityLogs: [],
+  skills: [],
 };
 
 class FileDatabase {
